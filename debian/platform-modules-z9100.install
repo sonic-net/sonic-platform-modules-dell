@@ -1,0 +1,2 @@
+scripts/* usr/local/bin
+cfg/* etc/modules-load.d
