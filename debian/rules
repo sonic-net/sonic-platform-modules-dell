@@ -10,12 +10,17 @@ MODULE_SRC := $(shell pwd)/modules
 %:
 	dh $@
 
+define install_modules
+dh_installdirs -p${1} $(KERNEL_SRC)/$(INSTALL_MOD_DIR)
+(for mod in ${2}; do cp $(MODULE_SRC)/$${mod}.ko debian/${1}/$(KERNEL_SRC)/$(INSTALL_MOD_DIR); done)
+endef
+
 override_dh_auto_build:
 	make -C $(KERNEL_SRC)/build M=$(MODULE_SRC)
 
 override_dh_auto_install:
-	dh_installdirs -p$(PACKAGE_NAME) $(KERNEL_SRC)/$(INSTALL_MOD_DIR)
-	cp $(MODULE_SRC)/*.ko debian/$(PACKAGE_NAME)/$(KERNEL_SRC)/$(INSTALL_MOD_DIR)
+	$(call install_modules,platform-modules-s6100,dell_s6100_iom_cpld dell_s6100_lpc)
+	$(call install_modules,platform-modules-z9100,dell_mailbox dell_z9100_cpld)
 
 override_dh_usrlocal:
 
