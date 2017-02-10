@@ -8,7 +8,7 @@
 # Should-Stop:
 # Default-Start:     S
 # Default-Stop:      0 6
-# Short-Description: Setup S6100 board.
+# Short-Description: Setup Z9100 board.
 ### END INIT INFO
 
 case "$1" in
