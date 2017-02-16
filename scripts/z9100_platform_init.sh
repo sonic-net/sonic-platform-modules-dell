@@ -1,9 +1,20 @@
 #!/bin/bash
 
 #platform init script for Dell Z9100
+found=0
+for devnum in 0 1; do
+    devname=`cat /sys/bus/i2c/devices/i2c-${devnum}/name`
+    # iSMT adapter can be at either dffd0000 or dfff0000
+    if [[ $devname == 'SMBus iSMT adapter at '* ]]; then
+        found=1
+        break
+    fi
+done
+
+[ $found -eq 0 ] && echo "cannot find iSMT" && exit 1
 
 # Attach Ox70 IOM mux's
-echo pca9547 0x70 > /sys/bus/i2c/devices/i2c-1/new_device
+echo pca9547 0x70 > /sys/bus/i2c/devices/i2c-${devnum}/new_device
 sleep 2
 # Attach 0x71 for iom  cpld's
 echo pca9548 0x71 > /sys/bus/i2c/devices/i2c-4/new_device
