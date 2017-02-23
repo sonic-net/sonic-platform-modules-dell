@@ -5,36 +5,29 @@ export INSTALL_MOD_DIR:=extra
 KVERSION   ?= $(shell uname -r)
 KERNEL_SRC :=  /lib/modules/$(KVERSION)
 MOD_SRC_DIR:= $(shell pwd)
-MODULE_DIRS:= S6100 Z9100
+MODULE_DIRS:= s6100 z9100
 
 %:
 	dh $@
 
-define build_modules
-(for mod in ${1}; do make -C $(KERNEL_SRC)/build M=$(MOD_SRC_DIR)/$${mod}/modules; done)
-endef
-
-define clean_modules
-(for mod in ${1}; do make -C $(KERNEL_SRC)/build M=$(MOD_SRC_DIR)/$${mod}/modules clean; done)
-endef
-
-define install_modules
-dh_installdirs -p${2} $(KERNEL_SRC)/$(INSTALL_MOD_DIR)
-cp $(MOD_SRC_DIR)/${1}/modules/*.ko debian/${2}/$(KERNEL_SRC)/$(INSTALL_MOD_DIR)
-endef
-
 override_dh_auto_build:
-	$(call build_modules,$(MODULE_DIRS))
+	(for mod in $(MODULE_DIRS); do \
+		make -C $(KERNEL_SRC)/build M=$(MOD_SRC_DIR)/$${mod}/modules; \
+	done)
 
 override_dh_auto_install:
-	$(call install_modules,S6100,platform-modules-s6100)
-	$(call install_modules,Z9100,platform-modules-z9100)
+	(for mod in $(MODULE_DIRS); do \
+		dh_installdirs -pplatform-modules-$${mod} \
+			$(KERNEL_SRC)/$(INSTALL_MOD_DIR); \
+		cp $(MOD_SRC_DIR)/$${mod}/modules/*.ko \
+			debian/platform-modules-$${mod}/$(KERNEL_SRC)/$(INSTALL_MOD_DIR); \
+	done)
 
 override_dh_usrlocal:
 
-override_dh_pysupport:
-
 override_dh_clean:
 	dh_clean
-	$(call clean_modules,$(MODULE_DIRS))
+	(for mod in $(MODULE_DIRS); do \
+		make -C $(KERNEL_SRC)/build M=$(MOD_SRC_DIR)/$${mod}/modules clean; \
+	done)
 
