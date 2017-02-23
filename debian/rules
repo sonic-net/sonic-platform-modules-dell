@@ -2,25 +2,33 @@
 
 export INSTALL_MOD_DIR:=extra
 
-PACKAGE_NAME := platform-modules-z9100
 KVERSION   ?= $(shell uname -r)
 KERNEL_SRC :=  /lib/modules/$(KVERSION)
-MODULE_SRC := $(shell pwd)/modules
+MOD_SRC_DIR:= $(shell pwd)
+MODULE_DIRS:= S6100 Z9100
 
 %:
 	dh $@
 
+define build_modules
+(for mod in ${1}; do make -C $(KERNEL_SRC)/build M=$(MOD_SRC_DIR)/$${mod}/modules; done)
+endef
+
+define clean_modules
+(for mod in ${1}; do make -C $(KERNEL_SRC)/build M=$(MOD_SRC_DIR)/$${mod}/modules clean; done)
+endef
+
 define install_modules
-dh_installdirs -p${1} $(KERNEL_SRC)/$(INSTALL_MOD_DIR)
-(for mod in ${2}; do cp $(MODULE_SRC)/$${mod}.ko debian/${1}/$(KERNEL_SRC)/$(INSTALL_MOD_DIR); done)
+dh_installdirs -p${2} $(KERNEL_SRC)/$(INSTALL_MOD_DIR)
+cp $(MOD_SRC_DIR)/${1}/modules/*.ko debian/${2}/$(KERNEL_SRC)/$(INSTALL_MOD_DIR)
 endef
 
 override_dh_auto_build:
-	make -C $(KERNEL_SRC)/build M=$(MODULE_SRC)
+	$(call build_modules,$(MODULE_DIRS))
 
 override_dh_auto_install:
-	$(call install_modules,platform-modules-s6100,dell_s6100_iom_cpld dell_s6100_lpc)
-	$(call install_modules,platform-modules-z9100,dell_mailbox dell_z9100_cpld)
+	$(call install_modules,S6100,platform-modules-s6100)
+	$(call install_modules,Z9100,platform-modules-z9100)
 
 override_dh_usrlocal:
 
@@ -28,7 +36,5 @@ override_dh_pysupport:
 
 override_dh_clean:
 	dh_clean
-	rm -f $(MODULE_SRC)/*.o $(MODULE_SRC)/*.ko $(MODULE_SRC)/*.mod.c $(MODULE_SRC)/.*.cmd
-	rm -f $(MODULE_SRC)/Module.markers $(MODULE_SRC)/Module.symvers $(MODULE_SRC)/modules.order
-	rm -rf $(MODULE_SRC)/.tmp_versions
+	$(call clean_modules,$(MODULE_DIRS))
 
