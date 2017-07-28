@@ -16,6 +16,9 @@ echo pca9547 0x70 > /sys/bus/i2c/devices/i2c-${devnum}/new_device
 # Attach 0x71 for iom cpld's
 echo pca9548 0x71 > /sys/bus/i2c/devices/i2c-4/new_device
 
+# Attach syseeprom
+echo 24c02 0x50 > /sys/bus/i2c/devices/i2c-2/new_device
+
 #Attach cpld devices to drivers for each iom
 for ((i=14;i<=17;i++)); do
     echo  dell_s6100_iom_cpld 0x3e > /sys/bus/i2c/devices/i2c-$i/new_device 
