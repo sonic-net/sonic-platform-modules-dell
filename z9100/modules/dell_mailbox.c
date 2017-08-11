@@ -1,6 +1,7 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/spinlock.h>
 //for platform drivers....
 #include <linux/platform_device.h>
 
@@ -20,61 +21,98 @@
 #define SMF_MB_READ_DATA  0x212
 #define SMF_MB_WRITE_DATA  0x213
 
-/* SMF MB Registers */
+/* System LED Registers */
 
-#define MAX_NUM_TEMP_SENSORS 0x0013
-#define MAX_NUM_PSU          0x0231
-#define PSU1_STATUS          0x0237
-#define PSU2_STATUS          0x0270
 #define SYS_STATUS_LED       0x130
-#define TOTAL_PWR            0x0232
-#define MAX_PSU1_PWR         0x0234
-#define MAX_PSU2_PWR         0x026D
 
 /* SMF temp sensors */
 
-#define TEMP_SENS_1  0x0014
-#define TEMP_SENS_2  0x0016
-#define TEMP_SENS_3  0x0018
-#define TEMP_SENS_4  0x001A
-#define TEMP_SENS_5  0x001C
-#define TEMP_SENS_6  0x001E
-#define TEMP_SENS_7  0x0020
-#define TEMP_SENS_8  0x0022
-#define TEMP_SENS_9  0x0024
-#define TEMP_SENS_10 0x0026
-#define TEMP_SENS_11 0x0028
+#define Z9100_MAX_TEMP_SENSORS 9
+
+#define MAX_NUM_TEMP_SENSORS 0x0013
+
+#define TEMP_1_SENS  0x0014
+#define TEMP_2_SENS  0x0016
+#define TEMP_3_SENS  0x0018
+#define TEMP_4_SENS  0x001A
+#define TEMP_5_SENS  0x001C
+#define TEMP_6_SENS  0x001E
+#define TEMP_7_SENS  0x0020
+#define TEMP_8_SENS  0x0022
+#define TEMP_9_SENS  0x0024
 
 /* FAN Tray */
-#define MAX_NUM_FAN_TRAYS    0x00F0
-#define MAX_NUM_FAN_PER_TRAY 0x00F1
-#define FAN_TRAY_PRES        0x0113
+
+#define Z9100_MAX_NUM_FAN_TRAYS 5
+
+#define MAX_NUM_FAN_TRAYS     0x00F0
+#define MAX_NUM_FANS_PER_TRAY 0x00F1
+#define FAN_TRAY_PRESENCE     0x0113
+#define FAN_STATUS_GROUP_A    0x0114
+#define FAN_STATUS_GROUP_B    0x0115
+#define FAN_TRAY_AIRFLOW      0x0116
 
 #define FAN_TRAY_1_SPEED  0x00F3
 #define FAN_TRAY_2_SPEED  0x00F7
 #define FAN_TRAY_3_SPEED  0x00FB
 #define FAN_TRAY_4_SPEED  0x00FF
 #define FAN_TRAY_5_SPEED  0x0103
-#define FAN_TRAY_6_SPEED  0x0107
-#define FAN_TRAY_7_SPEED  0x010B
-#define FAN_TRAY_8_SPEED  0x010F
 
+/* PSUs */
+
+#define Z9100_MAX_NUM_PSUS 2
+
+#define MAX_NUM_PSUS           0x0231
+#define CURRENT_TOTAL_POWER    0x0232
+
+// PSU1
+#define PSU_1_MAX_POWER        0x0234
+#define PSU_1_FUNCTION_SUPPORT 0x0236
+#define PSU_1_STATUS           0x0237
+#define PSU_1_TEMPERATURE      0x0239
+#define PSU_1_FAN_SPEED        0x023B
+#define PSU_1_FAN_STATUS       0x023D
+#define PSU_1_INPUT_VOLTAGE    0x023E
+#define PSU_1_OUTPUT_VOLTAGE   0x0240
+#define PSU_1_INPUT_CURRENT    0x0242
+#define PSU_1_OUTPUT_CURRENT   0x0244
+#define PSU_1_INPUT_POWER      0x0246
+#define PSU_1_OUTPUT_POWER     0x0248
+
+// PSU2
+#define PSU_2_MAX_POWER        0x026D
+#define PSU_2_FUNCTION_SUPPORT 0x026F
+#define PSU_2_STATUS           0x0270
+#define PSU_2_TEMPERATURE      0x0272
+#define PSU_2_FAN_SPEED        0x0274
+#define PSU_2_FAN_STATUS       0x0276
+#define PSU_2_INPUT_VOLTAGE    0x0277
+#define PSU_2_OUTPUT_VOLTAGE   0x0279
+#define PSU_2_INPUT_CURRENT    0x027B
+#define PSU_2_OUTPUT_CURRENT   0x027D
+#define PSU_2_INPUT_POWER      0x027F
+#define PSU_2_OUTPUT_POWER     0x0281
 
 /* Optics Table */
 #define MAX_NUM_OPTICS 0x410
 
 unsigned long  *mmio;
 
+spinlock_t smf_slock;
+
 /* SMF read function */
 
 static uint8_t sfm_read_byte(int addr)
 {
-    /* lock is acquired by user before invoking this */
-    //printk(KERN_ERR " Addr HI %x ",((addr >> 8) & 0xff));
+    u8 retval;
+
+    spin_lock(&smf_slock);
     outb(((addr >> 8) & 0xff),SMF_MB_ADDR_HI);
-    //printk(KERN_ERR "Addr LO %x \n",(addr & 0xff));
     outb((addr & 0xff),SMF_MB_ADDR_LO);
-    return inb(SMF_MB_READ_DATA);
+    retval = inb(SMF_MB_READ_DATA);
+    spin_unlock(&smf_slock);
+
+    return retval;
 }
 
 /* change ver to info */
@@ -84,10 +122,7 @@ static int sfm_read_two_byte(u16 offset)
 
     u8 low_byte=0,high_byte=0;
     high_byte = sfm_read_byte(offset);
-    //printk(KERN_ERR " low_byte %x\n",high_byte);
     low_byte =  sfm_read_byte(offset+1);
-    //printk(KERN_ERR " low_byte %x\n",low_byte);
-    //printk ( KERN_ERR " Value %x",((high_byte <<8) | ( low_byte)));
 
     return ((high_byte <<8) | ( low_byte));
 
@@ -118,8 +153,6 @@ static struct platform_device dell_z9100_lpc_dev = {
 
     }
 };
-
-
 
 /* change ver to info */
 static ssize_t get_smfver(struct device *dev, struct device_attribute *devattr, char *buf)
@@ -154,10 +187,9 @@ static ssize_t set_sys_led(struct device *dev, struct device_attribute *devattr,
     return count;
 }
 
-
 static ssize_t get_fan_tray_presence(struct device *dev, struct device_attribute *devattr, char *buf)
 {
-    return sprintf(buf,"%02hhx\n", ~sfm_read_byte(FAN_TRAY_PRES));
+    return sprintf(buf,"%02hhx\n", ~sfm_read_byte(FAN_TRAY_PRESENCE));
 }
 
 static ssize_t get_max_num_temp_sensors(struct device *dev, struct device_attribute *devattr, char *buf)
@@ -172,152 +204,225 @@ static ssize_t get_max_num_fan_trays(struct device *dev, struct device_attribute
 
 static ssize_t get_max_num_fans_per_tray(struct device *dev, struct device_attribute *devattr, char *buf)
 {
-    return sprintf(buf,"%x\n", sfm_read_byte(MAX_NUM_FAN_PER_TRAY));
+    return sprintf(buf,"%x\n", sfm_read_byte(MAX_NUM_FANS_PER_TRAY));
 }
 
-static ssize_t get_max_num_psu(struct device *dev, struct device_attribute *devattr, char *buf)
+static ssize_t get_fan_status_region_a(struct device *dev, struct device_attribute *devattr, char *buf)
 {
-    return sprintf(buf,"%x\n", sfm_read_byte(MAX_NUM_PSU));
+    return sprintf(buf,"%x\n", sfm_read_byte(FAN_STATUS_GROUP_A));
 }
 
-static ssize_t get_psu_total_pwr(struct device *dev, struct device_attribute *devattr, char *buf)
+static ssize_t get_fan_status_region_b(struct device *dev, struct device_attribute *devattr, char *buf)
 {
-    return sprintf(buf,"%d\n", (sfm_read_two_byte(TOTAL_PWR)/10));
+    return sprintf(buf,"%x\n", sfm_read_byte(FAN_STATUS_GROUP_B));
 }
 
-static ssize_t get_psu1_max_pwr(struct device *dev, struct device_attribute *devattr, char *buf)
+static ssize_t get_fan_tray_airflow(struct device *dev, struct device_attribute *devattr, char *buf)
 {
-    return sprintf(buf,"%d\n", (sfm_read_two_byte(MAX_PSU1_PWR)/10));
+    return sprintf(buf,"%x\n", sfm_read_byte(FAN_TRAY_AIRFLOW));
 }
 
-static ssize_t get_psu2_max_pwr(struct device *dev, struct device_attribute *devattr, char *buf)
+static ssize_t get_max_num_psus(struct device *dev, struct device_attribute *devattr, char *buf)
 {
-    return sprintf(buf,"%d\n", (sfm_read_two_byte(MAX_PSU2_PWR)/10));
+    return sprintf(buf,"%x\n", sfm_read_byte(MAX_NUM_PSUS));
 }
 
-static ssize_t get_psu1_status(struct device *dev, struct device_attribute *devattr, char *buf)
+static ssize_t get_psu_total_power(struct device *dev, struct device_attribute *devattr, char *buf)
 {
-    return sprintf(buf,"%x\n", sfm_read_byte(PSU1_STATUS));
-}
-
-static ssize_t get_psu2_status(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%x\n", sfm_read_byte(PSU2_STATUS));
+    return sprintf(buf,"%d\n", (sfm_read_two_byte(CURRENT_TOTAL_POWER)/10));
 }
 
 /* Temp Sensors */
 
-static ssize_t get_temp_sensor1(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", (sfm_read_two_byte(TEMP_SENS_1)/10));
-}
-static ssize_t get_temp_sensor2(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", (sfm_read_two_byte(TEMP_SENS_2)/10));
-}
-static ssize_t get_temp_sensor3(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", (sfm_read_two_byte(TEMP_SENS_3)/10));
-}
-static ssize_t get_temp_sensor4(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", (sfm_read_two_byte(TEMP_SENS_4)/10));
-}
-static ssize_t get_temp_sensor5(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", (sfm_read_two_byte(TEMP_SENS_5)/10));
-}
-static ssize_t get_temp_sensor6(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", (sfm_read_two_byte(TEMP_SENS_6)/10));
-}
-static ssize_t get_temp_sensor7(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", (sfm_read_two_byte(TEMP_SENS_7)/10));
-}
-static ssize_t get_temp_sensor8(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", (sfm_read_two_byte(TEMP_SENS_8)/10));
-}
-static ssize_t get_temp_sensor9(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", (sfm_read_two_byte(TEMP_SENS_9)/10));
-}
-static ssize_t get_temp_sensor10(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", (sfm_read_two_byte(TEMP_SENS_10)/10));
-}
-static ssize_t get_temp_sensor11(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", (sfm_read_two_byte(TEMP_SENS_11)/10));
+#define GET_TEMP_SENSOR(index) \
+static ssize_t get_temp_##index##_sensor(struct device *dev, struct device_attribute *devattr, char *buf) \
+{ \
+    return sprintf(buf,"%d\n", (sfm_read_two_byte(TEMP_##index##_SENS)/10)); \
 }
 
-static ssize_t get_fan_tray_1_speed(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", sfm_read_two_byte(FAN_TRAY_1_SPEED));
+GET_TEMP_SENSOR(1)
+GET_TEMP_SENSOR(2)
+GET_TEMP_SENSOR(3)
+GET_TEMP_SENSOR(4)
+GET_TEMP_SENSOR(5)
+GET_TEMP_SENSOR(6)
+GET_TEMP_SENSOR(7)
+GET_TEMP_SENSOR(8)
+GET_TEMP_SENSOR(9)
+
+/* FAN Trays */
+
+#define GET_FAN_TRAY_SPEED(index) \
+static ssize_t get_fan_tray_##index##_speed(struct device *dev, struct device_attribute *devattr, char *buf) \
+{ \
+    return sprintf(buf,"%d\n", sfm_read_two_byte(FAN_TRAY_##index##_SPEED)); \
 }
-static ssize_t get_fan_tray_2_speed(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", sfm_read_two_byte(FAN_TRAY_2_SPEED));
+
+GET_FAN_TRAY_SPEED(1)
+GET_FAN_TRAY_SPEED(2)
+GET_FAN_TRAY_SPEED(3)
+GET_FAN_TRAY_SPEED(4)
+GET_FAN_TRAY_SPEED(5)
+
+/* PSUs */
+
+#define GET_PSU_MAX_POWER(index) \
+static ssize_t get_psu_##index##_max_power(struct device *dev, struct device_attribute *devattr, char *buf) \
+{ \
+    return sprintf(buf,"%d\n", (sfm_read_two_byte(PSU_##index##_MAX_POWER)/10)); \
 }
-static ssize_t get_fan_tray_3_speed(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", sfm_read_two_byte(FAN_TRAY_3_SPEED));
+
+#define GET_PSU_FUNCTION_SUPPORT(index) \
+static ssize_t get_psu_##index##_function_support(struct device *dev, struct device_attribute *devattr, char *buf) \
+{ \
+    return sprintf(buf,"%d\n", (sfm_read_byte(PSU_##index##_FUNCTION_SUPPORT))); \
 }
-static ssize_t get_fan_tray_4_speed(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", sfm_read_two_byte(FAN_TRAY_4_SPEED));
+
+#define GET_PSU_STATUS(index) \
+static ssize_t get_psu_##index##_status(struct device *dev, struct device_attribute *devattr, char *buf) \
+{ \
+    return sprintf(buf,"%x\n", (sfm_read_byte(PSU_##index##_STATUS))); \
 }
-static ssize_t get_fan_tray_5_speed(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", sfm_read_two_byte(FAN_TRAY_5_SPEED));
+
+#define GET_PSU_TEMPERATURE(index) \
+static ssize_t get_psu_##index##_temperature(struct device *dev, struct device_attribute *devattr, char *buf) \
+{ \
+    return sprintf(buf,"%d\n", (sfm_read_two_byte(PSU_##index##_TEMPERATURE)/10)); \
 }
-static ssize_t get_fan_tray_6_speed(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", sfm_read_two_byte(FAN_TRAY_6_SPEED));
+
+#define GET_PSU_FAN_SPEED(index) \
+static ssize_t get_psu_##index##_fan_speed(struct device *dev, struct device_attribute *devattr, char *buf) \
+{ \
+    return sprintf(buf,"%d\n", (sfm_read_two_byte(PSU_##index##_FAN_SPEED))); \
 }
-static ssize_t get_fan_tray_7_speed(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-    return sprintf(buf,"%d\n", sfm_read_two_byte(FAN_TRAY_7_SPEED));
+
+#define GET_PSU_FAN_STATUS(index) \
+static ssize_t get_psu_##index##_fan_status(struct device *dev, struct device_attribute *devattr, char *buf) \
+{ \
+    return sprintf(buf,"%d\n", (sfm_read_byte(PSU_##index##_FAN_STATUS))); \
 }
+
+#define GET_PSU_INPUT_VOLTAGE(index) \
+static ssize_t get_psu_##index##_input_voltage(struct device *dev, struct device_attribute *devattr, char *buf) \
+{ \
+    return sprintf(buf,"%d\n", (sfm_read_two_byte(PSU_##index##_INPUT_VOLTAGE))); \
+}
+
+#define GET_PSU_OUTPUT_VOLTAGE(index) \
+static ssize_t get_psu_##index##_output_voltage(struct device *dev, struct device_attribute *devattr, char *buf) \
+{ \
+    return sprintf(buf,"%d\n", (sfm_read_two_byte(PSU_##index##_OUTPUT_VOLTAGE))); \
+}
+
+#define GET_PSU_INPUT_CURRENT(index) \
+static ssize_t get_psu_##index##_input_current(struct device *dev, struct device_attribute *devattr, char *buf) \
+{ \
+    return sprintf(buf,"%d\n", (sfm_read_two_byte(PSU_##index##_INPUT_CURRENT))); \
+}
+
+#define GET_PSU_OUTPUT_CURRENT(index) \
+static ssize_t get_psu_##index##_output_current(struct device *dev, struct device_attribute *devattr, char *buf) \
+{ \
+    return sprintf(buf,"%d\n", (sfm_read_two_byte(PSU_##index##_OUTPUT_CURRENT))); \
+}
+
+#define GET_PSU_INPUT_POWER(index) \
+static ssize_t get_psu_##index##_input_power(struct device *dev, struct device_attribute *devattr, char *buf) \
+{ \
+    return sprintf(buf,"%d\n", (sfm_read_two_byte(PSU_##index##_INPUT_POWER))); \
+}
+
+#define GET_PSU_OUTPUT_POWER(index) \
+static ssize_t get_psu_##index##_output_power(struct device *dev, struct device_attribute *devattr, char *buf) \
+{ \
+    return sprintf(buf,"%d\n", (sfm_read_two_byte(PSU_##index##_OUTPUT_POWER))); \
+}
+
+GET_PSU_MAX_POWER(1)
+GET_PSU_FUNCTION_SUPPORT(1)
+GET_PSU_STATUS(1)
+GET_PSU_TEMPERATURE(1)
+GET_PSU_FAN_SPEED(1)
+GET_PSU_FAN_STATUS(1)
+GET_PSU_INPUT_VOLTAGE(1)
+GET_PSU_OUTPUT_VOLTAGE(1)
+GET_PSU_INPUT_CURRENT(1)
+GET_PSU_OUTPUT_CURRENT(1)
+GET_PSU_INPUT_POWER(1)
+GET_PSU_OUTPUT_POWER(1)
+
+GET_PSU_MAX_POWER(2)
+GET_PSU_FUNCTION_SUPPORT(2)
+GET_PSU_STATUS(2)
+GET_PSU_TEMPERATURE(2)
+GET_PSU_FAN_SPEED(2)
+GET_PSU_FAN_STATUS(2)
+GET_PSU_INPUT_VOLTAGE(2)
+GET_PSU_OUTPUT_VOLTAGE(2)
+GET_PSU_INPUT_CURRENT(2)
+GET_PSU_OUTPUT_CURRENT(2)
+GET_PSU_INPUT_POWER(2)
+GET_PSU_OUTPUT_POWER(2)
+
+// Attribute declarations
 
 static DEVICE_ATTR(smf_ver,S_IRUGO,get_smfver, NULL);
+static DEVICE_ATTR(sys_led,S_IRUGO | S_IWUSR,get_sys_led,set_sys_led);
+
 static DEVICE_ATTR(max_num_temp_sensors,S_IRUGO,get_max_num_temp_sensors, NULL);
+static DEVICE_ATTR(temp_sensor_1,S_IRUGO,get_temp_1_sensor, NULL);
+static DEVICE_ATTR(temp_sensor_2,S_IRUGO,get_temp_2_sensor, NULL);
+static DEVICE_ATTR(temp_sensor_3,S_IRUGO,get_temp_3_sensor, NULL);
+static DEVICE_ATTR(temp_sensor_4,S_IRUGO,get_temp_4_sensor, NULL);
+static DEVICE_ATTR(temp_sensor_5,S_IRUGO,get_temp_5_sensor, NULL);
+static DEVICE_ATTR(temp_sensor_6,S_IRUGO,get_temp_6_sensor, NULL);
+static DEVICE_ATTR(temp_sensor_7,S_IRUGO,get_temp_7_sensor, NULL);
+static DEVICE_ATTR(temp_sensor_8,S_IRUGO,get_temp_8_sensor, NULL);
+static DEVICE_ATTR(temp_sensor_9,S_IRUGO,get_temp_9_sensor, NULL);
+
 static DEVICE_ATTR(max_num_fan_trays,S_IRUGO,get_max_num_fan_trays, NULL);
 static DEVICE_ATTR(max_num_fans_per_tray,S_IRUGO,get_max_num_fans_per_tray, NULL);
 static DEVICE_ATTR(fan_tray_presence,S_IRUGO,get_fan_tray_presence, NULL);
-static DEVICE_ATTR(max_num_psu,S_IRUGO,get_max_num_psu, NULL);
-static DEVICE_ATTR(psu_total_pwr,S_IRUGO,get_psu_total_pwr, NULL);
-static DEVICE_ATTR(sys_led,S_IRUGO | S_IWUSR,get_sys_led,set_sys_led);
-static DEVICE_ATTR(max_num_optics,S_IRUGO | S_IWUSR,get_max_num_optics,NULL);
-
-
-static DEVICE_ATTR(temp_sensor_1,S_IRUGO,get_temp_sensor1, NULL);
-static DEVICE_ATTR(temp_sensor_2,S_IRUGO,get_temp_sensor2, NULL);
-static DEVICE_ATTR(temp_sensor_3,S_IRUGO,get_temp_sensor3, NULL);
-static DEVICE_ATTR(temp_sensor_4,S_IRUGO,get_temp_sensor4, NULL);
-static DEVICE_ATTR(temp_sensor_5,S_IRUGO,get_temp_sensor5, NULL);
-static DEVICE_ATTR(temp_sensor_6,S_IRUGO,get_temp_sensor6, NULL);
-static DEVICE_ATTR(temp_sensor_7,S_IRUGO,get_temp_sensor7, NULL);
-static DEVICE_ATTR(temp_sensor_8,S_IRUGO,get_temp_sensor8, NULL);
-static DEVICE_ATTR(temp_sensor_9,S_IRUGO,get_temp_sensor9, NULL);
-static DEVICE_ATTR(temp_sensor_10,S_IRUGO,get_temp_sensor10, NULL);
-static DEVICE_ATTR(temp_sensor_11,S_IRUGO,get_temp_sensor11, NULL);
+static DEVICE_ATTR(fan_status_region_a,S_IRUGO,get_fan_status_region_a, NULL);
+static DEVICE_ATTR(fan_status_region_b,S_IRUGO,get_fan_status_region_b, NULL);
+static DEVICE_ATTR(fan_tray_airflow,S_IRUGO,get_fan_tray_airflow, NULL);
 
 static DEVICE_ATTR(fan_tray_1_speed,S_IRUGO,get_fan_tray_1_speed, NULL);
 static DEVICE_ATTR(fan_tray_2_speed,S_IRUGO,get_fan_tray_2_speed, NULL);
 static DEVICE_ATTR(fan_tray_3_speed,S_IRUGO,get_fan_tray_3_speed, NULL);
 static DEVICE_ATTR(fan_tray_4_speed,S_IRUGO,get_fan_tray_4_speed, NULL);
 static DEVICE_ATTR(fan_tray_5_speed,S_IRUGO,get_fan_tray_5_speed, NULL);
-static DEVICE_ATTR(fan_tray_6_speed,S_IRUGO,get_fan_tray_6_speed, NULL);
-static DEVICE_ATTR(fan_tray_7_speed,S_IRUGO,get_fan_tray_7_speed, NULL);
 
+static DEVICE_ATTR(max_num_psus,S_IRUGO,get_max_num_psus, NULL);
+static DEVICE_ATTR(psu_total_power,S_IRUGO,get_psu_total_power, NULL);
 
-static DEVICE_ATTR(psu1_max_pwr,S_IRUGO,get_psu1_max_pwr, NULL);
-static DEVICE_ATTR(psu2_max_pwr,S_IRUGO,get_psu2_max_pwr, NULL);
-static DEVICE_ATTR(psu1_status,S_IRUGO,get_psu1_status, NULL);
-static DEVICE_ATTR(psu2_status,S_IRUGO,get_psu2_status, NULL);
+static DEVICE_ATTR(psu_1_max_power,S_IRUGO,get_psu_1_max_power, NULL);
+static DEVICE_ATTR(psu_1_function_support,S_IRUGO,get_psu_1_function_support, NULL);
+static DEVICE_ATTR(psu_1_status,S_IRUGO,get_psu_1_status, NULL);
+static DEVICE_ATTR(psu_1_temperature,S_IRUGO,get_psu_1_temperature, NULL);
+static DEVICE_ATTR(psu_1_fan_speed,S_IRUGO,get_psu_1_fan_speed, NULL);
+static DEVICE_ATTR(psu_1_fan_status,S_IRUGO,get_psu_1_fan_status, NULL);
+static DEVICE_ATTR(psu_1_input_voltage,S_IRUGO,get_psu_1_input_voltage, NULL);
+static DEVICE_ATTR(psu_1_output_voltage,S_IRUGO,get_psu_1_output_voltage, NULL);
+static DEVICE_ATTR(psu_1_input_current,S_IRUGO,get_psu_1_input_current, NULL);
+static DEVICE_ATTR(psu_1_output_current,S_IRUGO,get_psu_1_output_current, NULL);
+static DEVICE_ATTR(psu_1_input_power,S_IRUGO,get_psu_1_input_power, NULL);
+static DEVICE_ATTR(psu_1_output_power,S_IRUGO,get_psu_1_output_power, NULL);
 
+static DEVICE_ATTR(psu_2_max_power,S_IRUGO,get_psu_2_max_power, NULL);
+static DEVICE_ATTR(psu_2_function_support,S_IRUGO,get_psu_2_function_support, NULL);
+static DEVICE_ATTR(psu_2_status,S_IRUGO,get_psu_2_status, NULL);
+static DEVICE_ATTR(psu_2_temperature,S_IRUGO,get_psu_2_temperature, NULL);
+static DEVICE_ATTR(psu_2_fan_speed,S_IRUGO,get_psu_2_fan_speed, NULL);
+static DEVICE_ATTR(psu_2_fan_status,S_IRUGO,get_psu_2_fan_status, NULL);
+static DEVICE_ATTR(psu_2_input_voltage,S_IRUGO,get_psu_2_input_voltage, NULL);
+static DEVICE_ATTR(psu_2_output_voltage,S_IRUGO,get_psu_2_output_voltage, NULL);
+static DEVICE_ATTR(psu_2_input_current,S_IRUGO,get_psu_2_input_current, NULL);
+static DEVICE_ATTR(psu_2_output_current,S_IRUGO,get_psu_2_output_current, NULL);
+static DEVICE_ATTR(psu_2_input_power,S_IRUGO,get_psu_2_input_power, NULL);
+static DEVICE_ATTR(psu_2_output_power,S_IRUGO,get_psu_2_output_power, NULL);
+
+static DEVICE_ATTR(max_num_optics,S_IRUGO | S_IWUSR,get_max_num_optics,NULL);
 
 static struct attribute *z9100_lpc_attrs[] = {
     &dev_attr_smf_ver.attr,
@@ -325,7 +430,10 @@ static struct attribute *z9100_lpc_attrs[] = {
     &dev_attr_max_num_fan_trays.attr,
     &dev_attr_max_num_fans_per_tray.attr,
     &dev_attr_fan_tray_presence.attr,
-    &dev_attr_max_num_psu.attr,
+    &dev_attr_fan_status_region_a.attr,
+    &dev_attr_fan_status_region_b.attr,
+    &dev_attr_fan_tray_airflow.attr,
+    &dev_attr_max_num_psus.attr,
     &dev_attr_sys_led.attr,
     &dev_attr_max_num_optics.attr,
     NULL,
@@ -341,8 +449,6 @@ static struct attribute *z9100_temperature_attrs[] = {
     &dev_attr_temp_sensor_7.attr,
     &dev_attr_temp_sensor_8.attr,
     &dev_attr_temp_sensor_9.attr,
-    &dev_attr_temp_sensor_10.attr,
-    &dev_attr_temp_sensor_11.attr,
     NULL,
 };
 
@@ -352,17 +458,35 @@ static struct attribute *z9100_fantray_attrs[] = {
     &dev_attr_fan_tray_3_speed.attr,
     &dev_attr_fan_tray_4_speed.attr,
     &dev_attr_fan_tray_5_speed.attr,
-    &dev_attr_fan_tray_6_speed.attr,
-    &dev_attr_fan_tray_7_speed.attr,
     NULL,
 };
 
 static struct attribute *z9100_psu_attrs[] = {
-    &dev_attr_psu_total_pwr.attr,
-    &dev_attr_psu1_max_pwr.attr,
-    &dev_attr_psu1_status.attr,
-    &dev_attr_psu2_max_pwr.attr,
-    &dev_attr_psu2_status.attr,
+    &dev_attr_psu_total_power.attr,
+    &dev_attr_psu_1_max_power.attr,
+    &dev_attr_psu_1_function_support.attr,
+    &dev_attr_psu_1_status.attr,
+    &dev_attr_psu_1_temperature.attr,
+    &dev_attr_psu_1_fan_speed.attr,
+    &dev_attr_psu_1_fan_status.attr,
+    &dev_attr_psu_1_input_voltage.attr,
+    &dev_attr_psu_1_output_voltage.attr,
+    &dev_attr_psu_1_input_current.attr,
+    &dev_attr_psu_1_output_current.attr,
+    &dev_attr_psu_1_input_power.attr,
+    &dev_attr_psu_1_output_power.attr,
+    &dev_attr_psu_2_max_power.attr,
+    &dev_attr_psu_2_function_support.attr,
+    &dev_attr_psu_2_status.attr,
+    &dev_attr_psu_2_temperature.attr,
+    &dev_attr_psu_2_fan_speed.attr,
+    &dev_attr_psu_2_fan_status.attr,
+    &dev_attr_psu_2_input_voltage.attr,
+    &dev_attr_psu_2_output_voltage.attr,
+    &dev_attr_psu_2_input_current.attr,
+    &dev_attr_psu_2_output_current.attr,
+    &dev_attr_psu_2_input_power.attr,
+    &dev_attr_psu_2_output_power.attr,
     NULL,
 };
 
@@ -448,18 +572,8 @@ static struct platform_driver dell_z9100_lpc_drv = {
 
 int dell_z9100_lpc_init(void)
 {
-    int max_temperature_sensors=0;
-    int max_fantrays=0;
-    int max_psu=0;
+    spin_lock_init(&smf_slock);
 
-    max_temperature_sensors=sfm_read_byte(MAX_NUM_TEMP_SENSORS);
-    max_fantrays=sfm_read_byte(MAX_NUM_FAN_TRAYS);
-    max_psu=sfm_read_byte(MAX_NUM_PSU);
-    z9100_temperature_attrs[max_temperature_sensors]=NULL;
-    z9100_fantray_attrs[max_fantrays]=NULL;
- /* First attribue is max power, hence skip that
-  * Each PSU has two attribues currently, hence adjust offset accordingly */
-    z9100_psu_attrs[(2*max_psu)+1]=NULL;
     platform_device_register(&dell_z9100_lpc_dev);
     platform_driver_register(&dell_z9100_lpc_drv);
     return 0;
