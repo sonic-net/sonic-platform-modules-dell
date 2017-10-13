@@ -161,6 +161,23 @@ switch_board_qsfp() {
     fi
 }
 
+# Enable/Disable low power mode on all QSFP ports
+switch_board_qsfp_lpmode() {
+    case $1 in
+        "enable")   value=0xffff
+                    ;;
+        "disable")  value=0x0
+                    ;;
+        *)          echo "s6100_platform: switch_board_qsfp_lpmode: invalid command $1!"
+                    return
+                    ;;
+    esac
+    echo $value > /sys/class/i2c-adapter/i2c-14/14-003e/qsfp_lpmode
+    echo $value > /sys/class/i2c-adapter/i2c-15/15-003e/qsfp_lpmode
+    echo $value > /sys/class/i2c-adapter/i2c-16/16-003e/qsfp_lpmode
+    echo $value > /sys/class/i2c-adapter/i2c-17/17-003e/qsfp_lpmode
+}
+
 init_devnum
 
 if [ "$1" == "init" ]; then
@@ -176,6 +193,7 @@ if [ "$1" == "init" ]; then
     switch_board_qsfp_mux "new_device"
     switch_board_sfp "new_device"
     switch_board_qsfp "new_device"
+    switch_board_qsfp_lpmode "disable"
 elif [ "$1" == "deinit" ]; then
     switch_board_sfp "delete_device"
     switch_board_cpld "delete_device"
