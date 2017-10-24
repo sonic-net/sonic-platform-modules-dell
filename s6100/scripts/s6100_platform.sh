@@ -149,15 +149,15 @@ switch_board_qsfp() {
     fi
 
     if [ -e  /sys/bus/i2c/devices/i2c-34 ]; then
-        qsfp_device_mod $1 18 33
+        qsfp_device_mod $1 34 49
     fi
 
     if [ -e  /sys/bus/i2c/devices/i2c-50 ]; then
-        qsfp_device_mod $1 18 33
+        qsfp_device_mod $1 50 65
     fi
 
     if [ -e  /sys/bus/i2c/devices/i2c-66 ]; then
-        qsfp_device_mod $1 18 33
+        qsfp_device_mod $1 66 81
     fi
 }
 
