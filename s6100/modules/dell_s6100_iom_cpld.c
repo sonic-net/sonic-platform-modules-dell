@@ -51,16 +51,15 @@ static void dell_s6100_iom_cpld_remove_client(struct i2c_client *client)
 {
     struct cpld_data *data = i2c_get_clientdata(client);
     kfree(data);
-    return 0;
+    return;
 }
 
 int dell_s6100_iom_cpld_read(struct cpld_data *data,unsigned short cpld_addr, u8 reg)
 {
     int ret = -EPERM;
-
-    mutex_lock(&data->update_lock);
     u8 high_reg =0x00;
 
+    mutex_lock(&data->update_lock);
     ret = i2c_smbus_write_byte_data(data->client, high_reg,reg);
     ret = i2c_smbus_read_byte(data->client);
     mutex_unlock(&data->update_lock);
@@ -72,10 +71,10 @@ int dell_s6100_iom_cpld_write(struct cpld_data *data,unsigned short cpld_addr, u
 {
     int ret = -EIO;
     u16 devdata=0;
+    u8 high_reg =0x00;
 
     mutex_lock(&data->update_lock);
     devdata = (value << 8) | reg;
-    u8 high_reg =0x00;
     i2c_smbus_write_word_data(data->client,high_reg,devdata);
     mutex_unlock(&data->update_lock);
 
