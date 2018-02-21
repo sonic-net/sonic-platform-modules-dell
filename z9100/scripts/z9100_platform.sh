@@ -2,6 +2,8 @@
 
 #platform init script for Dell Z9100
 
+source dell_i2c_utils.sh
+
 init_devnum() {
     found=0
     for devnum in 0 1; do
@@ -13,45 +15,7 @@ init_devnum() {
         fi
     done
 
-    [ $found -eq 0 ] && echo "cannot find iSMT" && exit 1
-}
-
-# Perform an i2c device configuration : instantiate / delete.
-# Input is of the form:
-# "echo [driver] <i2c-address> >  <i2c-bus/operation>"
-# where operation = "new_device" or "delete_device"
-
-i2c_config() {
-    local count=0
-    local MAX_BUS_RETRY=20
-    local MAX_I2C_OP_RETRY=10
-
-    i2c_bus_op=`echo "$@" | cut -d'>' -f 2`
-    i2c_bus=$(dirname $i2c_bus_op)
-
-    # check if bus exists
-    while [ "$count" -lt "$MAX_BUS_RETRY" ]; do
-        [ -e $i2c_bus ] && break || sleep .1
-        count=$((count+1))
-    done
-
-    if [[ "$count" == "$MAX_BUS_RETRY" ]]; then
-        echo "ERROR: $@ : i2c bus not created"
-        return
-    fi
-
-    # perform the add/delete
-    count=0
-    while [ "$count" -lt "$MAX_I2C_OP_RETRY" ]; do
-        eval "$@" > /dev/null 2>&1
-        [ $? == 0 ] && break || sleep .2
-        count=$((count+1))
-    done
-
-    if [[ "$count" == "$MAX_I2C_OP_RETRY" ]]; then
-        echo "ERROR: $@ : i2c operation failed"
-        return
-    fi
+    [[ $found -eq 0 ]] && echo "cannot find iSMT" && exit 1
 }
 
 # Attach/Detach CPU board mux @ 0x70
@@ -174,7 +138,7 @@ switch_board_qsfp() {
 
 init_devnum
 
-if [ "$1" == "init" ]; then
+if [[ "$1" == "init" ]]; then
     depmod -a
     modprobe i2c-dev
     modprobe i2c-mux-pca954x force_deselect_on_exit=1
@@ -188,7 +152,7 @@ if [ "$1" == "init" ]; then
     switch_board_qsfp_mux "new_device"
     switch_board_sfp "new_device"
     switch_board_qsfp "new_device"
-elif [ "$1" == "deinit" ]; then
+elif [[ "$1" == "deinit" ]]; then
     switch_board_sfp "delete_device"
     switch_board_cpld "delete_device"
     switch_board_mux "delete_device"
