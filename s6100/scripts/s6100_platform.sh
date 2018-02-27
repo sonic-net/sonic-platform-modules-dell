@@ -2,6 +2,8 @@
 
 #platform init script for Dell S6100
 
+source dell_i2c_utils.sh
+
 init_devnum() {
     found=0
     for devnum in 0 1; do
@@ -13,41 +15,39 @@ init_devnum() {
         fi
     done
 
-    [ $found -eq 0 ] && echo "cannot find iSMT" && exit 1
+    [[ $found -eq 0 ]] && echo "cannot find iSMT" && exit 1
 }
 
 # Attach/Detach CPU board mux @ 0x70
 cpu_board_mux() {
     case $1 in
-        "new_device")    echo pca9547 0x70 > /sys/bus/i2c/devices/i2c-${devnum}/$1
+        "new_device")    i2c_config "echo pca9547 0x70 > /sys/bus/i2c/devices/i2c-${devnum}/$1"
                          ;;
-        "delete_device") echo 0x70 > /sys/bus/i2c/devices/i2c-${devnum}/$1
+        "delete_device") i2c_config "echo 0x70 > /sys/bus/i2c/devices/i2c-${devnum}/$1"
                          ;;
         *)               echo "s6100_platform: cpu_board_mux: invalid command !"
                          ;;
     esac
-    sleep 2
 }
 
 # Attach/Detach Switchboard MUX @ 0x71
 switch_board_mux() {
     case $1 in
-        "new_device")    echo pca9548 0x71 > /sys/bus/i2c/devices/i2c-4/$1
+        "new_device")    i2c_config "echo pca9548 0x71 > /sys/bus/i2c/devices/i2c-4/$1"
                          ;;
-        "delete_device") echo 0x71 > /sys/bus/i2c/devices/i2c-4/$1
+        "delete_device") i2c_config "echo 0x71 > /sys/bus/i2c/devices/i2c-4/$1"
                          ;;
         *)               echo "s6100_platform: switch_board_mux : invalid command !"
                          ;;
     esac
-    sleep 2
 }
 
 # Attach/Detach syseeprom on CPU board
 sys_eeprom() {
     case $1 in
-        "new_device")    echo 24c02 0x50 > /sys/bus/i2c/devices/i2c-2/$1
+        "new_device")    i2c_config "echo 24c02 0x50 > /sys/bus/i2c/devices/i2c-2/$1"
                          ;;
-        "delete_device") echo 0x50 > /sys/bus/i2c/devices/i2c-2/$1
+        "delete_device") i2c_config "echo 0x50 > /sys/bus/i2c/devices/i2c-2/$1"
                          ;;
         *)               echo "s6100_platform: sys_eeprom : invalid command !"
                          ;;
@@ -60,15 +60,13 @@ switch_board_cpld() {
         "new_device")    
                       for ((i=14;i<=17;i++));
                       do
-                          echo  dell_s6100_iom_cpld 0x3e > /sys/bus/i2c/devices/i2c-$i/$1
-                          sleep 2
+                          i2c_config "echo  dell_s6100_iom_cpld 0x3e > /sys/bus/i2c/devices/i2c-$i/$1"
                       done
                       ;;
         "delete_device")
                       for ((i=14;i<=17;i++));
                       do
-                          echo  0x3e > /sys/bus/i2c/devices/i2c-$i/$1
-                          sleep 2
+                          i2c_config "echo  0x3e > /sys/bus/i2c/devices/i2c-$i/$1"
                       done
                       ;;
         *)            echo "s6100_platform: switch_board_cpld : invalid command !"
@@ -85,10 +83,8 @@ switch_board_qsfp_mux() {
                           # 0x71 mux on the IOM 1
                           mux_index=$(expr $i - 5)
                           echo "Attaching PCA9548 $mux_index"
-                          echo pca9548 0x71 > /sys/bus/i2c/devices/i2c-$i/$1
-                          sleep 2
-                          echo pca9548 0x72 > /sys/bus/i2c/devices/i2c-$i/$1
-                          sleep 2
+                          i2c_config "echo pca9548 0x71 > /sys/bus/i2c/devices/i2c-$i/$1"
+                          i2c_config "echo pca9548 0x72 > /sys/bus/i2c/devices/i2c-$i/$1"
                       done
                       ;;
         "delete_device")
@@ -97,26 +93,23 @@ switch_board_qsfp_mux() {
                           # 0x71 mux on the IOM 1
                           mux_index=$(expr $i - 5)
                           echo "Detaching PCA9548 $mux_index"
-                          echo 0x71 > /sys/bus/i2c/devices/i2c-$devnum/i2c-$i/$1
-                          sleep 2
-                          echo 0x72 > /sys/bus/i2c/devices/i2c-$devnum/i2c-$i/$1
-                          sleep 2
+                          i2c_config "echo 0x71 > /sys/bus/i2c/devices/i2c-$devnum/i2c-$i/$1"
+                          i2c_config "echo 0x72 > /sys/bus/i2c/devices/i2c-$devnum/i2c-$i/$1"
                       done
                       ;;
         *)            echo "s6100_platform: switch_board_qsfp_mux: invalid command !"
                       ;;
     esac
-    sleep 2
 }
 
 #Attach/Detach the SFP modules on PCA9548_2
 switch_board_sfp() {
     case $1 in
-        "new_device")    echo sff8436 0x50 > /sys/bus/i2c/devices/i2c-11/$1
-                         echo sff8436 0x50 > /sys/bus/i2c/devices/i2c-12/$1
+        "new_device")    i2c_config "echo sff8436 0x50 > /sys/bus/i2c/devices/i2c-11/$1"
+                         i2c_config "echo sff8436 0x50 > /sys/bus/i2c/devices/i2c-12/$1"
                          ;;
-        "delete_device") echo 0x50 > /sys/bus/i2c/devices/i2c-11/$1
-                         echo 0x50 > /sys/bus/i2c/devices/i2c-12/$1
+        "delete_device") i2c_config "echo 0x50 > /sys/bus/i2c/devices/i2c-11/$1"
+                         i2c_config "echo 0x50 > /sys/bus/i2c/devices/i2c-12/$1"
                          ;;
         *)               echo "s6100_platform: switch_board_sfp: invalid command !"
                          ;;
@@ -128,12 +121,12 @@ qsfp_device_mod() {
     case $1 in
         "new_device")    for ((i=$2;i<=$3;i++));
                          do
-                             echo sff8436 0x50 > /sys/bus/i2c/devices/i2c-$i/$1
+                             i2c_config "echo sff8436 0x50 > /sys/bus/i2c/devices/i2c-$i/$1"
                          done
                          ;;
         "delete_device") for ((i=$2;i<=$3;i++));
                          do
-                             echo 0x50 > /sys/bus/i2c/devices/i2c-$i/$1
+                             i2c_config "echo 0x50 > /sys/bus/i2c/devices/i2c-$i/$1"
                          done
                          ;;
         *)              echo "s6100_platform: qsfp_device_mod: invalid command $1:$2,$3!"
@@ -144,19 +137,19 @@ qsfp_device_mod() {
 # Attach/Detach 16 instances of QSFP ports on each IO modules
 # eeprom can dump data using below command
 switch_board_qsfp() {
-    if [ -e  /sys/bus/i2c/devices/i2c-18 ]; then
+    if  i2c_poll_bus_exists  "/sys/bus/i2c/devices/i2c-18"; then
         qsfp_device_mod $1 18 33
     fi
 
-    if [ -e  /sys/bus/i2c/devices/i2c-34 ]; then
+    if  i2c_poll_bus_exists  "/sys/bus/i2c/devices/i2c-34"; then
         qsfp_device_mod $1 34 49
     fi
 
-    if [ -e  /sys/bus/i2c/devices/i2c-50 ]; then
+    if  i2c_poll_bus_exists  "/sys/bus/i2c/devices/i2c-50"; then
         qsfp_device_mod $1 50 65
     fi
 
-    if [ -e  /sys/bus/i2c/devices/i2c-66 ]; then
+    if  i2c_poll_bus_exists  "/sys/bus/i2c/devices/i2c-66"; then
         qsfp_device_mod $1 66 81
     fi
 }
@@ -180,7 +173,7 @@ switch_board_qsfp_lpmode() {
 
 init_devnum
 
-if [ "$1" == "init" ]; then
+if [[ "$1" == "init" ]]; then
     depmod -a
     modprobe i2c-dev
     modprobe i2c-mux-pca954x force_deselect_on_exit=1
@@ -195,7 +188,7 @@ if [ "$1" == "init" ]; then
     switch_board_sfp "new_device"
     switch_board_qsfp "new_device"
     switch_board_qsfp_lpmode "disable"
-elif [ "$1" == "deinit" ]; then
+elif [[ "$1" == "deinit" ]]; then
     switch_board_sfp "delete_device"
     switch_board_cpld "delete_device"
     switch_board_mux "delete_device"
