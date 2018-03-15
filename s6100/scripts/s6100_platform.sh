@@ -188,6 +188,10 @@ if [[ "$1" == "init" ]]; then
     switch_board_sfp "new_device"
     switch_board_qsfp "new_device"
     switch_board_qsfp_lpmode "disable"
+
+    # Enable fstrim
+    systemctl start fstrim.timer
+    systemctl start fstrim.service
 elif [[ "$1" == "deinit" ]]; then
     switch_board_sfp "delete_device"
     switch_board_cpld "delete_device"
@@ -201,6 +205,10 @@ elif [[ "$1" == "deinit" ]]; then
     modprobe -r dell_s6100_iom_cpld
     modprobe -r i2c-mux-pca954x
     modprobe -r i2c-dev
+
+    # Disable fstrim
+    systemctl stop fstrim.service
+    systemctl stop fstrim.timer
 else
      echo "s6100_platform : Invalid option !"
 fi
