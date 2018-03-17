@@ -154,8 +154,7 @@ if [[ "$1" == "init" ]]; then
     switch_board_qsfp "new_device"
 
     # Enable fstrim
-    systemctl start fstrim.timer
-    systemctl start fstrim.service
+    /usr/local/bin/platform_fstrim.sh init &
 elif [[ "$1" == "deinit" ]]; then
     switch_board_sfp "delete_device"
     switch_board_cpld "delete_device"
@@ -171,8 +170,7 @@ elif [[ "$1" == "deinit" ]]; then
     modprobe -r i2c-dev
 
     # Disable fstrim
-    systemctl stop fstrim.service
-    systemctl stop fstrim.timer
+    /usr/local/bin/platform_fstrim.sh deinit &
 else
      echo "z9100_platform : Invalid option !"
 fi
