@@ -208,8 +208,8 @@ static const char *const s6100_temp_label[] = {
         "U2 Switch board?",
         "Front GE",
         "Front SFP+",
-        "BCM Internal",
-        "CPU Internal",
+        "Unused",
+        "Unused",
         "",
 	"PSU 1",
 	"PSU 2"

@@ -11,10 +11,11 @@
 import os
 import sys
 import logging
+import subprocess
+import re
 
 Z9100_MAX_FAN_TRAYS = 5
 Z9100_MAX_PSUS = 2
-S6100_MAX_IOMS = 4
 
 MAILBOX_DIR = "/sys/devices/platform/SMF.512/hwmon/hwmon1"
 
@@ -42,10 +43,10 @@ def get_pmc_register(reg_name):
 logging.basicConfig(level=logging.DEBUG)
 
 if (os.path.isdir(MAILBOX_DIR)):
-    print 'dell-s6100-lpc'
-    print 'Adapter: S6100 Platform Management Controller'
+    print 'dell-z9100-lpc'
+    print 'Adapter: Z9100 Platform Management Controller'
 else:
-    logging.error('S6100 Platform Management Controller module not loaded !')
+    logging.error('Z9100 Platform Management Controller module not loaded !')
     # sys.exit(0)
 
 # Print the information for temperature sensors
@@ -322,3 +323,81 @@ for psu in range(1, Z9100_MAX_PSUS + 1):
         logging.error('Unable to check PSU presence')
 
 print '\n  Total Power:      ', get_pmc_register('current_total_power'), 'W'
+
+
+# Print the BCM internal current and peak temperatures
+
+# TH has 8 internal sensors
+MAX_BCM_TEMP_SENSORS = 8
+
+# List that holds the currently monitored values
+bcm_sensors_curr = []
+# List that holds the peak monitored values
+bcm_sensors_peak = []
+
+# Given a sensor register dump, extract either
+# the current/peak field and convert to Celsius
+
+
+def get_sensor_value(buf, type):
+    BCM_TEMP_MAX = 410040
+    BCM_TEMP_MUL = 487
+    BCM_TEMP_DIV = 1000
+
+    # Set the search string appropriately
+    if (type == 'CURR'):
+        pattern = ",PVT_DATA="
+    elif (type == 'PEAK'):
+        pattern = "MIN_PVT_DATA="
+    else:
+        return 0
+
+    regex = re.escape(pattern) + "(.+?),"
+    try:
+        tmp = re.search(regex, buf).group(1)
+    except AttributeError:
+        return 0
+
+    # Strip the leading '0x'
+    tmp = int(tmp[2:], 16)
+
+    # BCM stores the temperature as a inverse.
+    # Scale down into a normal Celsius value.
+    tmp = BCM_TEMP_MUL * tmp
+    if (tmp > BCM_TEMP_MAX):
+        return 0
+
+    tmp = (BCM_TEMP_MAX - tmp) / BCM_TEMP_DIV
+    return tmp
+
+# Update the current and peak values for a given sensor
+
+
+def update_bcm_sensor(index):
+    cmd = 'g TOP_PVTMON_RESULT_'+str(index)
+
+    # Get the register dump
+    retbuf = subprocess.check_output(['bcmcmd', cmd])
+
+    # Get the current temperature reading
+    currval = get_sensor_value(retbuf, "CURR")
+    bcm_sensors_curr.append(currval)
+
+    # Get the peak temperature reading
+    peakval = get_sensor_value(retbuf, "PEAK")
+    bcm_sensors_peak.append(peakval)
+
+# Check if syncd is up
+cmd = 'docker ps'
+syncd_status = subprocess.check_output([cmd], shell=True)
+
+if "syncd" in syncd_status.split():
+    for i in range(0, MAX_BCM_TEMP_SENSORS):
+        update_bcm_sensor(i)
+
+    print '\nBCM Internal :       ' \
+          + '+' + str(max(bcm_sensors_curr)) + ' C' \
+          + '  (peak = +' + str(max(bcm_sensors_peak)) + ' C)'
+else:
+    print '\nBCM Internal :       ' + 'NA'
+
