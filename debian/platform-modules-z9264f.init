@@ -15,6 +15,8 @@ case "$1" in
 start)
     echo -n "Setting up board... "
 
+    depmod -a
+
     # /usr/local/bin/iom_power_on.sh
     /usr/local/bin/z9264f_platform.sh init
 
